@@ -1033,8 +1033,8 @@ document.addEventListener('input',e=>{const el=e.target;
 function readImg(file,max){return new Promise((res,rej)=>{const fr=new FileReader();fr.onload=()=>{const img=new Image();img.onload=()=>{const sc=Math.min(1,max/Math.max(img.width,img.height));const c=document.createElement('canvas');c.width=Math.round(img.width*sc);c.height=Math.round(img.height*sc);const x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,c.width,c.height);x.drawImage(img,0,0,c.width,c.height);res(c.toDataURL('image/jpeg',.82))};img.onerror=rej;img.src=fr.result};fr.onerror=rej;fr.readAsDataURL(file)})}
 
 /* ================= PRINT ================= */
-function doPrint(){
-  if(!['week','relief','acara','nota'].includes(UI.view)){UI.view='week';history.replaceState(null,'','#week')}
+function printDirect(view){
+  UI.view=view;history.replaceState(null,'','#'+view);
   const prevMode=UI.weekMode;if(UI.view==='week')UI.weekMode='grid';
   const P=S.profile,st=cur();
   $('#printHead').innerHTML=`<div class="phd">${(P.logo||P.gambarSekolah)?`<img src="${esc(P.logo||P.gambarSekolah)}" alt="" style="object-fit:contain">`:''}<div><h2>${esc(P.sekolah||'')}</h2><p>${esc(P.alamat||'')}</p></div>
@@ -1042,6 +1042,194 @@ function doPrint(){
   $('#printFoot').innerHTML=UI.view==='week'?`<div class="psig"><div><div class="ln">Tandatangan Guru<br>${esc(P.nama||'')}</div></div><div><div class="ln">Disahkan oleh<br>${esc(P.pengetua||'')}<br>Pengetua</div></div></div><p style="font-size:9px;margin-top:8px;color:#555">Dicetak: ${dLong(new Date())}</p>`:`<p style="font-size:9px;margin-top:8px;color:#555">Dicetak: ${dLong(new Date())}</p>`;
   render();if(!isDesk())closeSide();
   setTimeout(()=>{window.print();UI.weekMode=prevMode;render()},250);
+}
+const isIOS=()=>/iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+const isStandalone=()=>navigator.standalone===true||matchMedia('(display-mode: standalone)').matches;
+
+/* ---- data senarai (sama seperti paparan) ---- */
+function reliefRows(){const t=dk(new Date()),f=UI.reliefF;let L=S.relief.slice();
+  if(f==='Akan')return L.filter(r=>r.tarikh>=t).sort((a,b)=>(a.tarikh+a.mula).localeCompare(b.tarikh+b.mula));
+  if(f==='Lepas')L=L.filter(r=>r.tarikh<t);return L.sort((a,b)=>(b.tarikh+b.mula).localeCompare(a.tarikh+a.mula))}
+function acaraRows(){const t=dk(new Date()),f=UI.acaraF;let L=S.acara.slice();
+  if(f==='Akan')return L.filter(a=>(a.tarikhTamat||a.tarikh)>=t).sort((a,b)=>(a.tarikh+(a.mula||'')).localeCompare(b.tarikh+(b.mula||'')));
+  if(f==='Lepas')return L.filter(a=>(a.tarikhTamat||a.tarikh)<t).sort((a,b)=>b.tarikh.localeCompare(a.tarikh));
+  return L.filter(a=>a.jenis===f).sort((a,b)=>b.tarikh.localeCompare(a.tarikh))}
+function notaRows(){const q=UI.notaQ.toLowerCase();return S.nota.filter(n=>!q||(n.tajuk+' '+(n.isi||'')).toLowerCase().includes(q)).sort((a,b)=>(b.pin?1:0)-(a.pin?1:0)||(b.dibuat||0)-(a.dibuat||0))}
+
+/* ---- kanvas ---- */
+const PF='-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif',PM=26,PK=3;
+const F=(c,w,z)=>{c.font=`${w} ${z}px ${PF}`};
+function hexRgb(h){h=String(h||'#888').replace('#','');if(h.length===3)h=h.split('').map(x=>x+x).join('');const n=parseInt(h,16)||0;return[(n>>16)&255,(n>>8)&255,n&255]}
+const mixW=(h,t)=>{const[r,g,b]=hexRgb(h);return `rgb(${Math.round(r*t+255*(1-t))},${Math.round(g*t+255*(1-t))},${Math.round(b*t+255*(1-t))})`};
+const dark=(h,t)=>{const[r,g,b]=hexRgb(h);return `rgb(${Math.round(r*t)},${Math.round(g*t)},${Math.round(b*t)})`};
+function rr(c,x,y,w,h,r){r=Math.min(r,w/2,h/2);c.beginPath();c.moveTo(x+r,y);c.arcTo(x+w,y,x+w,y+h,r);c.arcTo(x+w,y+h,x,y+h,r);c.arcTo(x,y+h,x,y,r);c.arcTo(x,y,x+w,y,r);c.closePath()}
+function fit(c,t,w){t=String(t??'');if(c.measureText(t).width<=w)return t;while(t.length>1&&c.measureText(t+'…').width>w)t=t.slice(0,-1);return t+'…'}
+function wrapL(c,t,w,max){const out=[];String(t??'').split('\n').forEach(par=>{let line='';par.split(/\s+/).filter(Boolean).forEach(wd=>{const tt=line?line+' '+wd:wd;if(c.measureText(tt).width>w&&line){out.push(line);line=wd}else line=tt});out.push(line)});
+  while(out.length>1&&out[out.length-1]==='')out.pop();if(out.length>max){out.length=max;out[max-1]=fit(c,out[max-1]+'…',w)}return out.map(l=>fit(c,l,w))}
+function loadImg(src){return new Promise(r=>{if(!src)return r(null);const i=new Image();i.crossOrigin='anonymous';i.onload=()=>r(i);i.onerror=()=>r(null);i.src=src})}
+function newPage(PW,PH){const cv=document.createElement('canvas');cv.width=PW*PK;cv.height=PH*PK;const c=cv.getContext('2d');c.scale(PK,PK);c.fillStyle='#fff';c.fillRect(0,0,PW,PH);c.textBaseline='top';return{cv,c,PW,PH}}
+function drawHead(c,PW,title,logo,sub){
+  const P=S.profile,st=cur();let x=PM;c.textBaseline='top';c.textAlign='left';
+  if(logo){const s=44,r=Math.min(s/logo.width,s/logo.height);c.drawImage(logo,PM,PM,logo.width*r,logo.height*r);x=PM+52}
+  F(c,'800',14);c.fillStyle='#000';c.fillText(fit(c,(P.sekolah||'').toUpperCase(),PW*.52),x,PM+5);
+  F(c,'400',8.5);c.fillStyle='#333';wrapL(c,P.alamat||'',PW*.5,2).forEach((l,i)=>c.fillText(l,x,PM+24+i*10));
+  c.textAlign='right';F(c,'800',12);c.fillStyle='#000';c.fillText(title,PW-PM,PM);
+  F(c,'400',8.5);c.fillStyle='#333';[P.nama,P.jawatan,sub||(st.nama+(st.catatan?' · '+st.catatan:''))].filter(Boolean).forEach((t,i)=>c.fillText(fit(c,t,PW*.4),PW-PM,PM+16+i*10.5));
+  c.textAlign='left';c.strokeStyle='#000';c.lineWidth=1.2;c.beginPath();c.moveTo(PM,PM+52);c.lineTo(PW-PM,PM+52);c.stroke();
+  return PM+62;
+}
+function drawFoot(c,PW,PH,txt){F(c,'400',7);c.fillStyle='#666';c.textBaseline='bottom';c.textAlign='left';c.fillText('Dicetak: '+dLong(new Date()),PM,PH-12);if(txt){c.textAlign='right';c.fillText(txt,PW-PM,PH-12)}c.textAlign='left';c.textBaseline='top'}
+function weekLabel(ws){const days=orderedDays();const we=dateOf(ws,days[days.length-1]??5);return ws.getMonth()===we.getMonth()?`${ws.getDate()} – ${we.getDate()} ${MONTHS[we.getMonth()]} ${we.getFullYear()}`:`${ws.getDate()} ${MON_S[ws.getMonth()]} – ${we.getDate()} ${MON_S[we.getMonth()]} ${we.getFullYear()}`}
+
+function pageWeek(logo){
+  const pg=newPage(842,595),{c,PW,PH}=pg;
+  const st=cur(),P=st.periods,N=P.length,days=orderedDays(),ws=weekStart(addDays(new Date(),UI.weekOff*7));
+  let y=drawHead(c,PW,'JADUAL WAKTU MINGGUAN',logo);
+  F(c,'700',9.5);c.fillStyle='#000';c.fillText('Minggu: '+weekLabel(ws),PM,y);y+=15;
+  if(!N){F(c,'400',11);c.fillText('Tiada masa/waktu dalam set ini.',PM,y+10);return[pg.cv]}
+  const gx=PM,gw=PW-2*PM,dw=46,cw=(gw-dw)/N,hh=30,LH=15;
+  const rows=days.map(d=>{const date=dateOf(ws,d),key=dk(date),X=[];
+    if(UI.showX){S.relief.filter(x=>x.tarikh===key).forEach(x=>{const sp=span(x.mula,x.tamat,P);if(sp)X.push({s:sp[0],e:sp[1],c:RELIEF_C,ev:0,t:`Relief ${x.kelas}${x.subjek?' · '+x.subjek:''}`})});
+      S.acara.filter(a=>inRange(key,a)&&a.jenis!=='Cuti').forEach(a=>{const sp=a.mula?span(a.mula,a.tamat||m2t(t2m(a.mula)+30),P):[0,N-1];if(sp)X.push({s:sp[0],e:sp[1],c:EVT[a.jenis]||EVT['Lain-lain'],ev:1,t:`${a.jenis}: ${a.tajuk}`})})}
+    return{d,date,X,nL:lanes(X),cuti:isCuti(key)}});
+  const lt=rows.reduce((a,r)=>a+r.nL,0);
+  const rh=Math.max(30,Math.min(78,(PH-PM-92-y-hh-lt*LH)/Math.max(1,days.length)));
+  // header
+  c.fillStyle='#eef1f7';c.fillRect(gx,y,gw,hh);
+  c.textAlign='center';F(c,'800',9);c.fillStyle='#000';c.textBaseline='middle';c.fillText('Hari',gx+dw/2,y+hh/2);
+  P.forEach((p,i)=>{const x=gx+dw+i*cw;if(p.label){c.fillStyle='#dfe3ea';c.fillRect(x,y,cw,hh)}
+    c.fillStyle='#000';F(c,'800',9);c.textBaseline='top';c.fillText(fit(c,p.label||String(i+1),cw-2),x+cw/2,y+3);
+    F(c,'400',6.5);c.fillStyle='#333';c.fillText(fmtS(p.mula),x+cw/2,y+14);c.fillText(fmtS(p.tamat),x+cw/2,y+21.5)});
+  let yy=y+hh;
+  rows.forEach(r=>{const h=rh+r.nL*LH;
+    P.forEach((p,i)=>{if(p.label){c.fillStyle='#eef0f4';c.fillRect(gx+dw+i*cw,yy,cw,h)}});
+    c.strokeStyle='#bbb';c.lineWidth=.5;c.setLineDash([2,2]);
+    for(let i=1;i<N;i++){c.beginPath();c.moveTo(gx+dw+i*cw,yy);c.lineTo(gx+dw+i*cw,yy+h);c.stroke()}
+    if(r.nL){c.beginPath();c.moveTo(gx+dw,yy+rh);c.lineTo(gx+gw,yy+rh);c.stroke()}
+    c.setLineDash([]);c.strokeStyle='#777';c.lineWidth=.7;c.beginPath();c.moveTo(gx,yy);c.lineTo(gx+gw,yy);c.stroke();
+    c.textAlign='center';c.textBaseline='middle';c.fillStyle='#000';F(c,'800',12);c.fillText(DAYS_S[r.d],gx+dw/2,yy+h/2-5);
+    F(c,'600',7);c.fillStyle='#444';c.fillText(`${r.date.getDate()}/${r.date.getMonth()+1}`,gx+dw/2,yy+h/2+8);
+    st.slots.filter(s=>s.hari===r.d).forEach(s=>{const sp=span(s.mula,s.tamat,P);if(!sp)return;
+      const x=gx+dw+sp[0]*cw+2,w=(sp[1]-sp[0]+1)*cw-4,y2=yy+2.5,h2=rh-5,col=colorOf(s.kelas);
+      rr(c,x,y2,w,h2,5);c.fillStyle=r.cuti?'#f3f3f3':mixW(col,.17);c.fill();c.strokeStyle=mixW(col,.55);c.lineWidth=.7;c.stroke();
+      c.save();rr(c,x,y2,w,h2,5);c.clip();c.fillStyle=col;c.fillRect(x,y2,3.2,h2);c.restore();
+      c.textAlign='center';c.textBaseline='middle';F(c,'800',Math.max(8,Math.min(13,h2*.3)));c.fillStyle=dark(col,.68);c.fillText(fit(c,s.kelas,w-10),x+w/2+1,y2+h2/2);
+      F(c,'800',6);c.fillStyle='#555';if(s.subjek&&h2>26){c.textAlign='left';c.textBaseline='top';c.fillText(fit(c,s.subjek,w-10),x+6,y2+3)}
+      if(s.bilik&&h2>30){c.textAlign='right';c.textBaseline='bottom';c.fillText(fit(c,s.bilik,w-10),x+w-4,y2+h2-2)}});
+    if(r.cuti){c.textAlign='center';c.textBaseline='middle';F(c,'800',11);c.fillStyle='#e11d48';c.fillText(fit(c,'CUTI · '+r.cuti.tajuk,gw-dw-20),gx+dw+(gw-dw)/2,yy+rh/2)}
+    r.X.forEach(x=>{const x0=gx+dw+x.s*cw+2,w=(x.e-x.s+1)*cw-4,y0=yy+rh+x.lane*LH+2;rr(c,x0,y0,w,LH-4,3);c.fillStyle=mixW(x.c,.14);c.fill();
+      c.strokeStyle=x.c;c.lineWidth=.8;if(!x.ev)c.setLineDash([2,1.5]);c.stroke();c.setLineDash([]);
+      c.textAlign='left';c.textBaseline='middle';F(c,'700',6.5);c.fillStyle=dark(x.c,.7);c.fillText(fit(c,x.t,w-6),x0+3,y0+(LH-4)/2)});
+    yy+=h});
+  c.strokeStyle='#000';c.lineWidth=1;c.strokeRect(gx,y,gw,yy-y);
+  c.beginPath();c.moveTo(gx+dw,y);c.lineTo(gx+dw,yy);c.moveTo(gx,y+hh);c.lineTo(gx+gw,y+hh);c.stroke();
+  // legend
+  let lx=PM,ly=yy+8;c.textAlign='left';c.textBaseline='middle';F(c,'700',7.5);
+  const leg=[...new Set(st.slots.map(s=>s.kelas))].map(k=>[k,colorOf(k)]);if(UI.showX&&lt)leg.push(['Relief',RELIEF_C],['Acara',EVT.Mesyuarat]);
+  leg.forEach(([k,col])=>{const w=c.measureText(k).width+18;if(lx+w>PW-PM){lx=PM;ly+=13}rr(c,lx,ly,8,8,2);c.fillStyle=col;c.fill();c.fillStyle='#222';c.fillText(k,lx+11,ly+4.5);lx+=w+6});
+  // tandatangan
+  const P2=S.profile,sy=PH-PM-40;c.textAlign='center';c.textBaseline='top';F(c,'400',8);c.fillStyle='#000';c.strokeStyle='#000';c.lineWidth=.6;c.setLineDash([1.5,1.5]);
+  [[PM+90,'Tandatangan Guru',P2.nama],[PW-PM-90,'Disahkan oleh',(P2.pengetua||'')+'\nPengetua']].forEach(([cx,a,b])=>{c.beginPath();c.moveTo(cx-85,sy);c.lineTo(cx+85,sy);c.stroke();c.fillText(a,cx,sy+4);String(b||'').split('\n').forEach((l,i)=>c.fillText(fit(c,l,180),cx,sy+15+i*10))});
+  c.setLineDash([]);drawFoot(c,PW,PH,cur().nama);
+  return[pg.cv];
+}
+function pagesTable(title,sub,cols,rows,logo){
+  const PW=595,PH=842,tw=PW-2*PM,xs=[];let acc=PM;cols.forEach(cl=>{xs.push(acc);acc+=cl.w*tw});
+  const pages=[];let c,y;
+  const head=()=>{c.fillStyle='#eef1f7';c.fillRect(PM,y,tw,17);F(c,'800',7.5);c.fillStyle='#000';c.textBaseline='middle';c.textAlign='left';cols.forEach((cl,i)=>c.fillText(cl.h,xs[i]+4,y+8.5));c.textBaseline='top';y+=17};
+  const start=()=>{const pg=newPage(PW,PH);c=pg.c;pages.push(pg);y=drawHead(c,PW,title,logo,sub);F(c,'600',8);c.fillStyle='#333';c.fillText(`Jumlah rekod: ${rows.length}`,PM,y);y+=13;head()};
+  start();
+  if(!rows.length){F(c,'400',10);c.fillStyle='#333';c.fillText('Tiada rekod.',PM+4,y+8)}
+  rows.forEach((r,ri)=>{
+    const cells=cols.map((cl,i)=>{F(c,cl.b?'700':'400',8);return wrapL(c,cl.get(r,ri),cl.w*tw-8,cl.max||4)});
+    const h=Math.max(1,...cells.map(x=>x.length))*10.5+7;
+    if(y+h>PH-PM-14){start()}
+    if(ri%2){c.fillStyle='#f7f8fb';c.fillRect(PM,y,tw,h)}
+    cells.forEach((L,i)=>{F(c,cols[i].b?'700':'400',8);c.fillStyle=cols[i].col?cols[i].col(r):'#111';L.forEach((t,j)=>c.fillText(t,xs[i]+4,y+4+j*10.5))});
+    c.strokeStyle='#d8dce4';c.lineWidth=.5;c.beginPath();c.moveTo(PM,y+h);c.lineTo(PM+tw,y+h);c.stroke();y+=h});
+  pages.forEach((p,i)=>drawFoot(p.c,PW,PH,`Halaman ${i+1} / ${pages.length}`));
+  return pages.map(p=>p.cv);
+}
+const dTxt=k=>{const d=pk(k);return `${pad(d.getDate())}/${pad(d.getMonth()+1)}/${d.getFullYear()}\n${DAYS[d.getDay()]}`};
+async function buildPages(what){
+  const logo=await loadImg(S.profile.logo||S.profile.gambarSekolah);
+  if(what==='week')return pageWeek(logo);
+  if(what==='relief'){const L=reliefRows(),mins=L.reduce((a,r)=>a+Math.max(0,t2m(r.tamat)-t2m(r.mula)),0);
+    return pagesTable('REKOD KELAS RELIEF',`${({Akan:'Hari ini & akan datang',Lepas:'Lepas',Semua:'Semua'})[UI.reliefF]} · ${(mins/60).toFixed(1)} jam`,[
+      {h:'Bil',w:.06,get:(r,i)=>String(i+1)},{h:'Tarikh',w:.15,get:r=>dTxt(r.tarikh)},{h:'Masa',w:.17,get:r=>fmtT(r.mula)+' –\n'+fmtT(r.tamat)},
+      {h:'Kelas',w:.11,b:1,get:r=>r.kelas},{h:'Subjek',w:.1,get:r=>r.subjek||'-'},{h:'Ganti guru',w:.17,get:r=>r.ganti||'-'},{h:'Catatan',w:.24,get:r=>r.catatan||''}],L,logo)}
+  if(what==='acara')return pagesTable('MESYUARAT & PROGRAM',({Akan:'Akan datang',Lepas:'Lepas'})[UI.acaraF]||UI.acaraF,[
+      {h:'Bil',w:.06,get:(r,i)=>String(i+1)},{h:'Tarikh',w:.17,get:a=>dTxt(a.tarikh)+(a.tarikhTamat&&a.tarikhTamat>a.tarikh?'\nhingga '+pk(a.tarikhTamat).toLocaleDateString('en-GB'):'')},
+      {h:'Masa',w:.15,get:a=>a.mula?fmtT(a.mula)+(a.tamat?' –\n'+fmtT(a.tamat):''):'Sepanjang hari'},{h:'Jenis',w:.12,get:a=>a.jenis,col:a=>EVT[a.jenis]||'#111'},
+      {h:'Tajuk',w:.3,b:1,get:a=>a.tajuk+(a.catatan?'\n'+a.catatan:''),max:6},{h:'Lokasi',w:.2,get:a=>a.lokasi||'-'}],acaraRows(),logo);
+  return pagesTable('CATATAN','',[{h:'Bil',w:.06,get:(r,i)=>String(i+1)},{h:'Tajuk',w:.26,b:1,get:n=>(n.pin?'📌 ':'')+n.tajuk},{h:'Tarikh',w:.14,get:n=>n.tarikh?dTxt(n.tarikh):'-'},{h:'Isi',w:.54,get:n=>n.isi||'',max:40}],notaRows(),logo);
+}
+function makePDF(cvs,PWpt,PHpt){
+  const enc=s=>{const a=new Uint8Array(s.length);for(let i=0;i<s.length;i++)a[i]=s.charCodeAt(i)&255;return a};
+  const parts=[],offs=[];let len=0;const push=x=>{const b=typeof x==='string'?enc(x):x;parts.push(b);len+=b.length};
+  const obj=(id,fn)=>{offs[id]=len;push(id+' 0 obj\n');fn();push('\nendobj\n')};
+  push('%PDF-1.4\n%\xE2\xE3\xCF\xD3\n');const n=cvs.length;
+  obj(1,()=>push('<< /Type /Catalog /Pages 2 0 R >>'));
+  obj(2,()=>push(`<< /Type /Pages /Kids [${cvs.map((_,i)=>(3+3*i)+' 0 R').join(' ')}] /Count ${n} >>`));
+  cvs.forEach((cv,i)=>{const id=3+3*i,pw=cv.width/PK,ph=cv.height/PK;
+    const b64=cv.toDataURL('image/jpeg',.92).split(',')[1],bin=atob(b64),jpg=new Uint8Array(bin.length);for(let j=0;j<bin.length;j++)jpg[j]=bin.charCodeAt(j);
+    obj(id,()=>push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pw} ${ph}] /Resources << /XObject << /Im0 ${id+2} 0 R >> >> /Contents ${id+1} 0 R >>`));
+    const cs=`q ${pw} 0 0 ${ph} 0 0 cm /Im0 Do Q`;obj(id+1,()=>push(`<< /Length ${cs.length} >>\nstream\n${cs}\nendstream`));
+    obj(id+2,()=>{push(`<< /Type /XObject /Subtype /Image /Width ${cv.width} /Height ${cv.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpg.length} >>\nstream\n`);push(jpg);push('\nendstream')})});
+  const tot=3+3*n,xr=len;let x=`xref\n0 ${tot}\n0000000000 65535 f \n`;for(let i=1;i<tot;i++)x+=String(offs[i]).padStart(10,'0')+' 00000 n \n';
+  push(x+`trailer\n<< /Size ${tot} /Root 1 0 R >>\nstartxref\n${xr}\n%%EOF`);
+  return new Blob(parts,{type:'application/pdf'});
+}
+const canvasBlob=cv=>new Promise(r=>cv.toBlob(r,'image/png'));
+async function shareOrSave(file){
+  if(navigator.canShare&&navigator.canShare({files:[file]})){
+    try{await navigator.share({files:[file],title:file.name});return}catch(e){if(e&&e.name==='AbortError')return}
+  }
+  const a=document.createElement('a');a.href=URL.createObjectURL(file);a.download=file.name;document.body.appendChild(a);a.click();
+  setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},4000);toast('Fail dimuat turun',file.name,'ok');
+}
+const PR={what:'week',file:null,prev:null};
+function doPrint(){
+  PR.what=['week','relief','acara','nota'].includes(UI.view)?UI.view:'week';PR.file=null;PR.prev=null;
+  if(!isDesk())closeSide();exportModal();
+}
+function exportModal(){
+  const sa=isIOS()&&isStandalone();const W=PR.what;
+  const ws=weekStart(addDays(new Date(),UI.weekOff*7));
+  const lab={week:'Jadual Mingguan',relief:'Rekod Relief',acara:'Mesyuarat & Program',nota:'Catatan'};
+  showModal(`<div class="mbox"><div class="mh">${ico('print')}<h3>Cetak / Simpan</h3><button class="ibtn" data-x style="width:36px;height:36px">${ico('x',18)}</button></div>
+  <div class="mb">
+    <div class="fld"><span>Kandungan</span><div class="seg">${Object.keys(lab).map(k=>`<button class="${W===k?'on':''}" data-pw="${k}">${lab[k]}</button>`).join('')}</div></div>
+    ${W==='week'?`<div class="row" style="margin-top:12px"><button class="btn ico sm" data-wk="-1">${ico('left',16)}</button><b style="flex:1;text-align:center">${weekLabel(ws)}</b><button class="btn ico sm" data-wk="1">${ico('right',16)}</button></div>
+      <label class="chk"><input type="checkbox" data-sx${UI.showX?' checked':''}> Sertakan relief & acara minggu ini</label>`:
+      `<p class="muted" style="font-size:13px;margin:10px 0 0">Mengikut tapisan semasa di halaman ${lab[W]}.</p>`}
+    <div id="prevBox" style="margin-top:12px">${PR.prev?`<img src="${PR.prev}" style="width:100%;border-radius:10px;border:1px solid var(--line);background:#fff">`:''}</div>
+    <div style="display:grid;gap:8px;margin-top:12px">
+      ${PR.file?`<button class="btn pri" data-share style="padding:13px">${ico('up',18)} ${navigator.canShare?'Kongsi / Cetak / Simpan':'Muat turun'} ${PR.file.name.endsWith('.pdf')?'PDF':'gambar'}</button>
+        <button class="btn" data-reset>${ico('refresh',16)} Jana semula</button>`:
+      `<button class="btn pri" data-gen="pdf" style="padding:13px">${ico('note',18)} Jana PDF (A4)</button>
+       <button class="btn" data-gen="png" style="padding:12px">${ico('img',18)} Jana gambar PNG ${W!=='week'?'(halaman 1)':''}</button>
+       ${sa?'':`<button class="btn" data-direct style="padding:12px">${ico('print',18)} Cetak terus (pelayar)</button>`}`}
+    </div>
+    <p class="hint">${ico('info',14)} ${sa?'Apps Skrin Utama iPhone tidak menyokong cetak terus. Jana PDF, kemudian pilih <b>Print</b>, <b>Save to Files</b> atau WhatsApp dalam menu Kongsi.':'PDF boleh dicetak, disimpan atau dihantar melalui WhatsApp/e-mel.'}</p>
+  </div></div>`);
+  modal.querySelectorAll('[data-x]').forEach(b=>b.onclick=closeModal);
+  modal.querySelectorAll('[data-pw]').forEach(b=>b.onclick=()=>{PR.what=b.dataset.pw;PR.file=null;PR.prev=null;exportModal()});
+  modal.querySelectorAll('[data-wk]').forEach(b=>b.onclick=()=>{UI.weekOff+=+b.dataset.wk;PR.file=null;PR.prev=null;exportModal();if(UI.view==='week')render()});
+  const sx=modal.querySelector('[data-sx]');if(sx)sx.onchange=()=>{UI.showX=sx.checked;PR.file=null;PR.prev=null;exportModal();if(UI.view==='week')render()};
+  modal.querySelectorAll('[data-gen]').forEach(b=>b.onclick=async()=>{
+    const kind=b.dataset.gen;b.disabled=true;b.innerHTML='Sedang menjana…';
+    try{const cvs=await buildPages(PR.what);
+      const base=`${({week:'jadual-mingguan',relief:'rekod-relief',acara:'mesyuarat-program',nota:'catatan'})[PR.what]}-${dk(new Date())}`;
+      if(kind==='pdf'){PR.file=new File([makePDF(cvs)],base+'.pdf',{type:'application/pdf'})}
+      else{PR.file=new File([await canvasBlob(cvs[0])],base+'.png',{type:'image/png'})}
+      PR.prev=cvs[0].toDataURL('image/jpeg',.6);
+      if(kind==='pdf'&&cvs.length>1)toast(`PDF sedia — ${cvs.length} halaman`,'','ok',2000);
+      exportModal();
+    }catch(e){console.error(e);toast('Gagal menjana fail',String(e&&e.message||e),'err',5000);exportModal()}});
+  const sh=modal.querySelector('[data-share]');if(sh)sh.onclick=()=>shareOrSave(PR.file);
+  const rs=modal.querySelector('[data-reset]');if(rs)rs.onclick=()=>{PR.file=null;PR.prev=null;exportModal()};
+  const dr=modal.querySelector('[data-direct]');if(dr)dr.onclick=()=>{closeModal();printDirect(PR.what)};
 }
 
 /* ================= SWIPE ================= */
