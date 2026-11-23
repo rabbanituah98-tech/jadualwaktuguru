@@ -271,6 +271,19 @@ table.tb tr:last-child td{border-bottom:0}
 .toast b{display:block}
 .toast small{opacity:.9;font-weight:500}
 @keyframes tin{from{transform:translateY(20px);opacity:0}}
+/* ---------- date picker ---------- */
+.dp{position:relative;display:inline-flex;align-items:center;gap:8px;cursor:pointer;padding:7px 12px;border-radius:12px;border:1px solid var(--line);background:var(--card);transition:.15s;max-width:100%}
+.dp:hover,.dp:focus-within{border-color:var(--accent);color:var(--accent)}
+.dp span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dp input,.tbd input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;border:0;padding:0;margin:0;font-size:16px;-webkit-appearance:none;appearance:none;z-index:2}
+.wk-bar .lab.dp{flex:0 1 auto}
+.wk-bar .sp{flex:1}
+.tbd{position:relative;display:inline-flex;align-items:center;gap:3px;cursor:pointer;border-radius:6px}
+.side-right .tbd{flex-direction:row-reverse}
+.tbd:hover small{color:var(--accent)}
+.dl.sel{box-shadow:inset 0 0 0 3px var(--warn)}
+.dl.sel small{color:var(--warn)}
+.daycard.sel{border-color:var(--warn);box-shadow:0 0 0 2px color-mix(in srgb,var(--warn) 40%,transparent)}
 /* ---------- print ---------- */
 .print-only{display:none}
 @media print{
@@ -310,7 +323,7 @@ table.tb tr:last-child td{border-bottom:0}
   <main>
     <header class="topbar">
       <button class="ibtn" data-act="toggleSide" aria-label="Menu" id="btnMenu"></button>
-      <div class="tb-title"><h1 id="viewTitle">Hari Ini</h1><small id="tbDate"></small></div>
+      <div class="tb-title"><h1 id="viewTitle">Hari Ini</h1><label class="tbd" title="Pilih tarikh"><small id="tbDate"></small><svg class="ic" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--muted)"><path d="M6 9l6 6 6-6"/></svg><input type="date" data-chg="pickDate" aria-label="Pilih tarikh"></label></div>
       <div class="tb-actions">
         <span class="chip-clock hide-sm" id="tbClock">--:--</span>
         <button class="ibtn" data-act="notifPanel" aria-label="Notifikasi" id="btnBell"></button>
@@ -362,7 +375,7 @@ bell:'<path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a
 plus:'<path d="M12 5v14M5 12h14"/>',
 edit:'<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>',
 trash:'<path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6"/>',
-left:'<path d="M15 18l-6-6 6-6"/>',right:'<path d="M9 18l6-6-6-6"/>',x:'<path d="M18 6L6 18M6 6l12 12"/>',
+chev:'<path d="M6 9l6 6 6-6"/>',left:'<path d="M15 18l-6-6 6-6"/>',right:'<path d="M9 18l6-6-6-6"/>',x:'<path d="M18 6L6 18M6 6l12 12"/>',
 clock:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
 pin:'<path d="M12 17v5M8 3h8l-1 7 4 4H5l4-4z"/>',
 down:'<path d="M12 3v12M7 10l5 5 5-5M5 21h14"/>',up:'<path d="M12 21V9M7 14l5-5 5 5M5 3h14"/>',
@@ -790,14 +803,14 @@ function vWeek(){
   if(!st.periods.length)body=`<div class="card empty"><div class="big">⏱️</div>Set ini belum ada masa/waktu.<br><br><button class="btn pri" data-act="go" data-v="urus">${ico('clock',16)} Tetapkan masa</button></div>`;
   else if(mode==='grid')body=gridHTML(days,ws);
   else body=`<div class="daycards">${days.map(d=>{const date=dateOf(ws,d);const isT=dk(date)===dk(new Date());const r=itemsFor(date);const it=UI.showX?r.items:r.items.filter(i=>i.type==='kelas');
-    return `<div class="card daycard ${isT?'today':''}"><h4>${DAYS[d]} <span class="muted" style="font-weight:600;font-size:13px">${date.getDate()} ${MON_S[date.getMonth()]}</span><span style="flex:1"></span>${isT?'<span class="pill">Hari ini</span>':''}<button class="btn ico sm no-print" data-act="addSlot" data-hari="${d}" aria-label="Tambah">${ico('plus',16)}</button></h4>
+    return `<div class="card daycard ${isT?'today':''} ${dk(date)===UI.selDate?'sel':''}"><h4>${DAYS[d]} <span class="muted" style="font-weight:600;font-size:13px">${date.getDate()} ${MON_S[date.getMonth()]}</span><span style="flex:1"></span>${isT?'<span class="pill">Hari ini</span>':''}<button class="btn ico sm no-print" data-act="addSlot" data-hari="${d}" aria-label="Tambah">${ico('plus',16)}</button></h4>
     ${r.cuti?`<div class="banner" style="--c:${EVT.Cuti}">${esc(r.cuti.tajuk)}</div>`:''}
     <div class="tl">${it.length?it.map(i=>`<div class="tli ${i.type}" style="--c:${i.c}" data-act="${{kelas:'editSlot',relief:'editRelief',acara:'editAcara'}[i.type]}" data-id="${i.id}"><div class="tm"><b>${i.mula?fmtS(i.mula):'—'}</b>${i.tamat?fmtS(i.tamat):''}</div><div class="bd"></div><div class="ct"><b>${esc(i.title)}</b><small>${esc(i.sub)}</small></div></div>`).join(''):'<div class="muted" style="font-size:13px;padding:6px">Tiada kelas</div>'}</div></div>`}).join('')}</div>`;
   return `<div class="wk-bar">
     <button class="btn ico" data-act="weekNav" data-n="-1" aria-label="Minggu lepas">${ico('left',18)}</button>
     <button class="btn sm" data-act="weekNav" data-n="0">Minggu ini</button>
     <button class="btn ico" data-act="weekNav" data-n="1" aria-label="Minggu depan">${ico('right',18)}</button>
-    <div class="lab">${lab}</div>
+    <label class="lab dp" title="Pilih tarikh">${ico('cal',18)}<span>${lab}</span>${ico('chev',16)}<input type="date" data-chg="pickDate" value="${UI.selDate||dk(ws)}" aria-label="Pilih tarikh"></label><span class="sp"></span>
     <div class="seg"><button class="${mode==='grid'?'on':''}" data-act="weekMode" data-m="grid">${ico('grid',15)} Grid</button><button class="${mode==='list'?'on':''}" data-act="weekMode" data-m="list">${ico('list',15)} Senarai</button></div>
     <label class="chk" style="padding:0 6px"><input type="checkbox" data-chg="showX"${UI.showX?' checked':''}> Relief & acara</label>
     <button class="btn sm pri" data-act="addSlot">${ico('plus',16)} Kelas</button>
@@ -819,7 +832,7 @@ function gridHTML(days,ws){
       S.acara.filter(a=>inRange(key,a)&&a.jenis!=='Cuti').forEach(a=>{const sp=a.mula?span(a.mula,a.tamat||m2t(t2m(a.mula)+30),P):[0,N-1];if(sp)X.push({s:sp[0],e:sp[1],c:EVT[a.jenis]||EVT['Lain-lain'],act:'editAcara',id:a.id,ev:1,t:`${a.jenis}: ${a.tajuk}`})});
     }
     const nL=lanes(X);
-    h+=`<div class="dl${isT?' today':''}" style="grid-row:${r}/span ${1+nL};grid-column:1"><b>${DAYS_S[d]}</b><small>${date.getDate()}/${date.getMonth()+1}</small></div>`;
+    h+=`<div class="dl${isT?' today':''}${key===UI.selDate?' sel':''}" style="grid-row:${r}/span ${1+nL};grid-column:1"><b>${DAYS_S[d]}</b><small>${date.getDate()}/${date.getMonth()+1}</small></div>`;
     for(let L=0;L<=nL;L++)P.forEach((p,i)=>{const isNow=isT&&L===0&&nm>=t2m(p.mula)&&nm<t2m(p.tamat);
       h+=`<div class="cell${L?' xr':''}${p.label?' rh':''}${isNow?' now':''}${isT?' tr':''}" style="grid-row:${r+L};grid-column:${i+2}"${L===0&&!p.label?` data-act="addSlot" data-hari="${d}" data-mula="${p.mula}"`:''}></div>`});
     if(cuti)h+=`<div class="cutiov" style="grid-row:${r};grid-column:2/${N+2}">CUTI · ${esc(cuti.tajuk)}</div>`;
@@ -987,7 +1000,7 @@ const ACT={
   useSet:el=>{S.activeSet=el.dataset.id;save();render();toast('Set aktif: '+cur().nama,'','ok',1800)},
   delSet:el=>{if(S.sets.length<2)return;S.sets=S.sets.filter(x=>x.id!==el.dataset.id);if(!S.sets.find(x=>x.id===S.activeSet))S.activeSet=S.sets[0].id;save();render();toast('Set dipadam','','ok',1500)},
   autoColor:()=>{const st=cur();const ks=[...new Set(st.slots.map(s=>s.kelas))].sort();st.colors={};ks.forEach((k,i)=>st.colors[k]=PAL[i%PAL.length]);save();render()},
-  weekNav:el=>{const n=+el.dataset.n;UI.weekOff=n?UI.weekOff+n:0;render()},
+  weekNav:el=>{const n=+el.dataset.n;UI.weekOff=n?UI.weekOff+n:0;if(!n)UI.selDate=null;render()},
   weekMode:el=>{UI.weekMode=el.dataset.m;render()},
   reliefF:el=>{UI.reliefF=el.dataset.f;render()},acaraF:el=>{UI.acaraF=el.dataset.f;render()},
   setOpt:el=>{const k=el.dataset.k;let v=el.dataset.v;if(v==='true'||v==='false')v=v==='true';S.settings[k]=v;save();applyTheme();applySide();render()},
@@ -1017,6 +1030,7 @@ document.addEventListener('change',async e=>{
   if(el.dataset.pd&&el.type==='url'&&UI.pd){render();return}
   if(!c)return;
   if(c==='useSet'){S.activeSet=el.value;save();render();toast('Set aktif: '+cur().nama,'','ok',1600)}
+  else if(c==='pickDate'){if(!el.value)return;jumpTo(el.value)}
   else if(c==='showX'){UI.showX=el.checked;render()}
   else if(c==='day'){const d=+el.dataset.d;const D=new Set(S.settings.days);el.checked?D.add(d):D.delete(d);if(!D.size){el.checked=true;toast('Pilih sekurang-kurangnya satu hari','','err');return}S.settings.days=[...D];save();render()}
   else if(c==='nt'){S.settings.notify[el.dataset.k]=el.checked;save();render()}
@@ -1030,6 +1044,13 @@ document.addEventListener('input',e=>{const el=e.target;
   if(el.dataset.pd&&UI.pd){UI.pd[el.dataset.pd]=el.value}
   if(el.dataset.inp==='notaQ'){UI.notaQ=el.value;clearTimeout(el._t);el._t=setTimeout(()=>{render();const i=$('[data-inp=notaQ]');if(i){i.focus();i.setSelectionRange(i.value.length,i.value.length)}},250)}
 });
+function weekOffOf(key){return Math.round((weekStart(pk(key))-weekStart(new Date()))/(7*864e5))}
+function jumpTo(key){const d=pk(key);UI.weekOff=weekOffOf(key);UI.selDate=key;
+  if(UI.view!=='week')go('week');else render();
+  const wd=S.settings.days.includes(d.getDay());
+  toast(dLong(d),wd?'':'Hari ini bukan hari bekerja — dipaparkan minggu berkenaan.','',2200);
+  setTimeout(()=>{const e=$('.daycard.sel')||$('.dl.sel');if(e)e.scrollIntoView({behavior:'smooth',block:'center'})},80)}
+document.addEventListener('click',e=>{const i=e.target.closest('.dp input,.tbd input');if(!i)return;if(!i.value)i.value=UI.selDate||dk(new Date());try{i.showPicker&&i.showPicker()}catch(x){}},true);
 function readImg(file,max){return new Promise((res,rej)=>{const fr=new FileReader();fr.onload=()=>{const img=new Image();img.onload=()=>{const sc=Math.min(1,max/Math.max(img.width,img.height));const c=document.createElement('canvas');c.width=Math.round(img.width*sc);c.height=Math.round(img.height*sc);const x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,c.width,c.height);x.drawImage(img,0,0,c.width,c.height);res(c.toDataURL('image/jpeg',.82))};img.onerror=rej;img.src=fr.result};fr.onerror=rej;fr.readAsDataURL(file)})}
 
 /* ================= PRINT ================= */
@@ -1200,7 +1221,7 @@ function exportModal(){
   showModal(`<div class="mbox"><div class="mh">${ico('print')}<h3>Cetak / Simpan</h3><button class="ibtn" data-x style="width:36px;height:36px">${ico('x',18)}</button></div>
   <div class="mb">
     <div class="fld"><span>Kandungan</span><div class="seg">${Object.keys(lab).map(k=>`<button class="${W===k?'on':''}" data-pw="${k}">${lab[k]}</button>`).join('')}</div></div>
-    ${W==='week'?`<div class="row" style="margin-top:12px"><button class="btn ico sm" data-wk="-1">${ico('left',16)}</button><b style="flex:1;text-align:center">${weekLabel(ws)}</b><button class="btn ico sm" data-wk="1">${ico('right',16)}</button></div>
+    ${W==='week'?`<div class="row" style="margin-top:12px"><button class="btn ico sm" data-wk="-1">${ico('left',16)}</button><label class="dp" style="flex:1;justify-content:center">${ico('cal',16)}<span style="font-weight:700">${weekLabel(ws)}</span>${ico('chev',14)}<input type="date" data-mpick value="${UI.selDate||dk(ws)}"></label><button class="btn ico sm" data-wk="1">${ico('right',16)}</button></div>
       <label class="chk"><input type="checkbox" data-sx${UI.showX?' checked':''}> Sertakan relief & acara minggu ini</label>`:
       `<p class="muted" style="font-size:13px;margin:10px 0 0">Mengikut tapisan semasa di halaman ${lab[W]}.</p>`}
     <div id="prevBox" style="margin-top:12px">${PR.prev?`<img src="${PR.prev}" style="width:100%;border-radius:10px;border:1px solid var(--line);background:#fff">`:''}</div>
@@ -1216,6 +1237,7 @@ function exportModal(){
   modal.querySelectorAll('[data-x]').forEach(b=>b.onclick=closeModal);
   modal.querySelectorAll('[data-pw]').forEach(b=>b.onclick=()=>{PR.what=b.dataset.pw;PR.file=null;PR.prev=null;exportModal()});
   modal.querySelectorAll('[data-wk]').forEach(b=>b.onclick=()=>{UI.weekOff+=+b.dataset.wk;PR.file=null;PR.prev=null;exportModal();if(UI.view==='week')render()});
+  const mp=modal.querySelector('[data-mpick]');if(mp)mp.onchange=()=>{if(!mp.value)return;UI.weekOff=weekOffOf(mp.value);UI.selDate=mp.value;PR.file=null;PR.prev=null;exportModal();if(UI.view==='week')render()};
   const sx=modal.querySelector('[data-sx]');if(sx)sx.onchange=()=>{UI.showX=sx.checked;PR.file=null;PR.prev=null;exportModal();if(UI.view==='week')render()};
   modal.querySelectorAll('[data-gen]').forEach(b=>b.onclick=async()=>{
     const kind=b.dataset.gen;b.disabled=true;b.innerHTML='Sedang menjana…';
